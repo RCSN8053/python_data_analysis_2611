@@ -3,6 +3,8 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
+# import matplotlib.font_manager as fm
 
 #옵션
 pd.set_option('display.unicode.east_asian_width', True)
@@ -225,7 +227,7 @@ print(corr_df)
 조건 중 하나라도 True면 관심 대상으로 가정
 '''
 rist_df =df[
-    (df['혈압분류'] == '고혈압2기')|
+    (df['혈압분류'] == '고혈압 2기')|
     (df['공복혈당'] >= 126)|
     (df['BMI'] >= 25.0)].copy()
 print('[관심대상 목록]')
@@ -240,3 +242,262 @@ print(rist_df[['환자ID','성별','나이','SBP(수축기)','DBP(이완기)','�
 #crosstab() : 두개 이상의 범주형 변수의 관계를 표로 정리하는 함수
 cross = pd.crosstab(df['성별'], df['혈압분류'])
 print(cross)
+
+#비율분석
+'''
+개수보다 비율이 중요할때가 많음
+- 전체 중에서 각 혈압분류가 몇 %인지 등
+'''
+#value_counts() : 각 항목이 몇번 나왔는지 세는 함수
+#normalize=True 추가시 개수가 아니라 비율로 바꿔줌
+bp_ratio = df['혈압분류'].value_counts(normalize=True) *100
+print("[혈압 분류 비율]")
+print(bp_ratio.round(1))
+
+#상위 N명 분석
+'''
+특정 기준에서 상위 데이터 확인
+- BMI 높은 사람 상위 3명
+- 위험군 빠륵 파악
+'''
+#nlargest() : 데이터에서 값이 가장 큰 상위 N개 뽑는 함수
+top3_bmi = df.nlargest(3,'BMI')
+print("[BMI 상위 3명]")
+print(top3_bmi[['환자ID','BMI','BMI분류']])
+
+#조건 + 그룹 분석
+'''
+특정 조건을 만족하는 데이터만 따로 분석
+- 고혈압2기 환자만 따로 모와서 성별 평균 비교
+'''
+ht_df = df[df['혈압분류'] == '고혈압 2기']
+ht_mean = ht_df.groupby('성별')[['BMI','공복혈당']].mean()
+print('[고혈압2기 환자 - 성별 평균]')
+print(ht_mean)
+
+#순위 만들기
+'''
+데이터에 순서를 부여
+- BMI 기준 순위
+'''
+#rank() : 순위를 매기는 함수
+#ascending=True는 작은 값부터 1로 순위를 매김
+df['BMI순위'] = df['BMI'].rank(ascending=True)
+print("[BMI 순위]")
+print(df[['환자ID','BMI','BMI순위']])
+
+df_sorted = df.sort_values('BMI순위')
+print(df_sorted[['환자ID', 'BMI', 'BMI순위']])
+
+'''
+조건을 점수화해서 위험도를 표현
+
+조건
+- 고혈합 2기
+- 공복혈당 >=126
+- BMI >= 25
+- 각 조건마다 1점
+'''
+
+df['위험점수'] = (
+    (df['혈압분류'] == '고혈압 2기').astype(int) +
+    (df['공복혈당'] >= 126).astype(int) +
+    (df['BMI'] >= 25).astype(int)
+)
+
+print('[위험점수]')
+print(df[['환자ID', '위험점수']])
+
+#시각화
+#혈압 분포 히스토그램
+'''
+히스토그램
+- 숫자 데이터가 어느 구간에 얼마나 많이 모여있는지 보여주는 그래프
+- bin이 크면 클 수록 나뉘는 구간이 촘촘함
+- 구간 수색에 따라 그래프 모양이 달라짐
+
+'''
+plt.rcParams['font.family'] = 'NanumGothic'
+plt.rcParams['axes.unicode_minus'] = False
+
+plt.figure()
+plt.hist(df['SBP(수축기)'],bins=8)
+plt.title('SBP(수축기 혈압) 분포')
+plt.xlabel('SBP(mmHg)')
+plt.ylabel('빈도')
+plt.tight_layout()
+# plt.show()
+
+#할압분류별 평균 막대 그래프
+bp_sbp_mean = df.groupby('혈압분류')['SBP(수축기)'].mean().sort_values(ascending=True)
+plt.figure()
+plt.bar(bp_sbp_mean.index, bp_sbp_mean.values)
+plt.title('AVG SBP By Blood Category')
+plt.xlabel('Blood Pressure Category')
+plt.ylabel('Average SBP(mmHg)')
+plt.tight_layout()
+# plt.show()
+
+#산점도 BMI SBP
+'''
+산점도 : 두개의 숫자 변수 관계를 점으로 표현한 그래프
+'''
+plt.figure()
+plt.scatter(df['BMI'],df['SBP(수축기)'])
+plt.title("BMI VS SBP scatter plot")
+plt.xlabel("BMI")
+plt.ylabel("SBP")
+plt.tight_layout()
+# plt.show()
+
+#측정일 기준 SBP 추이
+date_sbp = df.groupby('측정일')['SBP(수축기)'].mean()
+plt.close('all')
+plt.figure()
+plt.plot(date_sbp.index, date_sbp.values)
+plt.title('AVG SBP Over Time')
+plt.xlabel('date')
+plt.xticks(rotation=30)
+plt.ylabel('AVG SBP')
+plt.tight_layout()
+# plt.show()
+
+#BMI 분류 인원수(pie)
+bmi_count = df['BMI분류'].value_counts()
+plt.figure
+plt.pie(bmi_count.values,labels=bmi_count.index,autopct='%1.1f%%')
+plt.title("BMI Category DIST")
+plt.tight_layout()
+# plt.show()
+
+#혈압 분류별 BMI
+'''
+박스 플롯
+- 평균이 아니라 분포 보여줌
+- 이상치 확인 가능
+'''
+plt.close('all')
+plt.figure()
+df.boxplot(column='BMI', by='혈압분류')
+plt.title('BMI DIST by Blood category')
+plt.suptitle('')
+plt.xlabel('Boold category')
+plt.ylabel('BMI')
+plt.tight_layout()
+# plt.show()
+
+#성별 BMI
+plt.close('all')
+plt.figure()
+df[df['성별'] == 'M']['BMI'].hist(alpha=0.5,bins=8)
+df[df['성별'] == 'F']['BMI'].hist(alpha=0.5,bins=8)
+plt.title("BMI DIST By Gender")
+plt.xlabel("BMI")
+plt.ylabel("Frequency")
+plt.legend(['Mael','Female'])
+plt.tight_layout()
+# plt.show()
+
+#상관관계 히트맵
+'''
+히트맵
+- 값의 크기를 색으로 표현하는 그래프
+- 값이 클수록 진한 색
+- 값이 작을수록 연한 색
+'''
+plt.close('all')
+corr_cols = ['나이','키_cm','몸무게_kg','SBP(수축기)','DBP(이완기)','공복혈당','BMI']
+corr = df[corr_cols].corr()
+plt.figure()
+plt.imshow(corr)
+plt.colorbar()
+plt.xticks(range(len(corr_cols)), corr_cols, rotation=45)
+plt.yticks(range(len(corr_cols)), corr_cols, rotation=45)
+plt.title('correlation Heatmap')
+plt.tight_layout()
+# plt.show()
+
+#인사이트 자동 요약
+
+#혈압분류 비율
+bp_counts = df['혈압분류'].value_counts()
+bp_ratio = (bp_counts / len(df))*100
+print("[혈압 분류 분포(개수)]")
+print(bp_counts)
+print("[혈압 분류 분포(%)]")
+print(bp_ratio.round(1))
+
+#위험 신호 : 공복혈당 평균과 126이상 비율
+mean_glu = df['공복혈당'].mean()
+high_glu_ratio = (df['공복혈당'] >= 126).mean() *100
+print(f'[공복혈당 평균 : {mean_glu: .2f}mg/dl]')
+print(f'[공복혈당 126이상 비율 : {high_glu_ratio: .1f}%]')
+
+#운동빈도와 주요 지표 관계
+corr_exercise_sbp = df['운동빈도(주)'].corr(df['SBP(수축기)'])
+corr_exercise_bmi = df['운동빈도(주)'].corr(df['BMI'])
+print(f"[운동빈도 / SBP 상관계수] : {corr_exercise_sbp: .2f}")
+print(f"[운동빈도 / BMI 상관계수] : {corr_exercise_bmi: .2f}")
+
+#전략/제안
+
+stratege = []
+
+#혈압 2기 비율 기반 코멘트
+ht2_ratio = (df['혈압분류'] == '고혈압 2기').mean()*100
+if ht2_ratio >= 30:
+    stratege.append('고혈압 2기 비율이 높은 편이라, 생활습관관련 교육 및 추적 관리가 필요함')
+else:
+    stratege.append('고혈압 2기 비율이 과도하가 높진 않지만, 고혈압 1기 이상에 대한 예방 안내가 유효합니다.')
+
+#BMI 비만 비율 코멘트
+obesity_ratio = (df['BMI분류'] == '비만').mean()*100
+stratege.append(f'BMI 기준 비만 비율이 {obesity_ratio: .1f}%로 확인되어 체중관리 프로램을 고려할 수 있습니다.')
+
+#혈당 고위험 비율 코멘트
+if high_glu_ratio > 20:
+    stratege.append(f'공복혈당 126 이상 비율이 {high_glu_ratio: 1f}이기 때문에 혈당 관려 추가 검사/상담 연계를 고려할 수 있습니다.')
+else:
+    stratege.append('공복할당 고위험 비율이 높진 않지만, 식습관, 활동량 관련 기본 가이드를 제공하면 좋습니다.')
+
+print('\n[3가지 제한]')
+for s in stratege:
+    print(f'- {s}')
+
+#위험 점수 기반 위험군 요약
+'''
+- 위험 점수 2 이상 == 고위험군
+'''
+
+high_risk = df[df['위험점수'] >= 2]
+high_risk_ratio = (len(high_risk) / len(df))*100
+
+print(f'[고위험군 비율(위험점수 2 이상)] : {high_risk_ratio: .1f}')
+print('[고위험군 목록]')
+print(high_risk[['환자ID', 'BMI', '공복혈당', '혈압분류', '위험점수']])
+
+#최상위 위험 대상 TOP 3
+'''
+가장 위험한 사람 추출
+- 위험점수 기준
+- 돌일하면 BMI 높은순
+'''
+top_risk = df.sort_values(['위험점수', 'BMI'], ascending=False).head(3)
+print('[최상위 위험 대상 Top 3]')
+print(top_risk[['환자ID','위험점수','BMI','공복혈당','혈압분류']])
+
+#전체 건강 상태 등급 평가
+'''
+데이터 전체를 하나의 결과로 요약
+기준
+- 고위험군 비율
+- 혈당 위험 비율
+'''
+if high_risk_ratio > 30 or high_glu_ratio > 30:
+    health_level = '위험'
+elif high_risk_ratio > 15 or high_glu_ratio > 15:
+    health_level = '주의'
+else:
+    health_level = '양호'
+
+print(f'[전체 건강 상태 평가] : {health_level}')
